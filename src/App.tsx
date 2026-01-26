@@ -981,7 +981,7 @@ export default function App() {
     }
   };
 
-  const toggleTheme = () => setDarkMode(!darkMode);
+  const toggleTheme = () => setDarkMode((prev: boolean) => !prev);
 
   const createCourse = () => {
     if (!newCourseName.trim()) return;
@@ -1054,8 +1054,8 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen font-sans transition-colors duration-300">
-      <div className="dark:text-slate-100 transition-colors duration-300">
+    <div className={cn("min-h-screen font-sans transition-colors duration-300 bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50", darkMode && "dark")}>
+      <div className="transition-colors duration-300">
         {/* Header Global */}
         <header className="bg-white/80 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 transition-colors duration-300 backdrop-blur-md">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
