@@ -832,6 +832,66 @@ const GlobalGradebook = ({ course, onUpdate }: { course: Course, onUpdate: (c: C
   );
 }
 
+// --- STATS COMPONENT ---
+
+const CourseStats = ({ course, compact = false }: { course: Course, compact?: boolean }) => {
+  const stats = useMemo(() => {
+    if (!course.students || course.students.length === 0) return { approved: 0, failed: 0, avg: 0 };
+
+    let approvedCount = 0;
+    let sum = 0;
+
+    course.students.forEach(s => {
+      const finalGrade = calculateFinalCourseGrade(s, course);
+      if (finalGrade >= 5) approvedCount++;
+      sum += finalGrade;
+    });
+
+    const total = course.students.length;
+    return {
+      approved: (approvedCount / total) * 100,
+      failed: ((total - approvedCount) / total) * 100,
+      avg: sum / total
+    };
+  }, [course]);
+
+  if (compact) {
+    return (
+      <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+        <div className="text-center">
+          <div className="text-[10px] text-green-600 dark:text-green-400 font-bold uppercase mb-0.5">Aprobados</div>
+          <div className="text-sm font-bold text-green-700 dark:text-green-300">{stats.approved.toFixed(0)}%</div>
+        </div>
+        <div className="text-center border-l border-slate-100 dark:border-slate-800">
+          <div className="text-[10px] text-red-600 dark:text-red-400 font-bold uppercase mb-0.5">Suspensos</div>
+          <div className="text-sm font-bold text-red-700 dark:text-red-300">{stats.failed.toFixed(0)}%</div>
+        </div>
+        <div className="text-center border-l border-slate-100 dark:border-slate-800">
+          <div className="text-[10px] text-blue-600 dark:text-blue-400 font-bold uppercase mb-0.5">Media</div>
+          <div className="text-sm font-bold text-blue-700 dark:text-blue-300">{stats.avg.toFixed(1)}</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
+      <div className="bg-green-50 dark:bg-green-900/10 p-4 rounded-xl border border-green-100 dark:border-green-900/30 flex flex-col items-center justify-center">
+        <div className="text-green-600 dark:text-green-400 text-sm font-semibold uppercase mb-1">Alumnos Aprobados</div>
+        <div className="text-3xl font-bold text-green-700 dark:text-green-300">{stats.approved.toFixed(1)}%</div>
+      </div>
+      <div className="bg-red-50 dark:bg-red-900/10 p-4 rounded-xl border border-red-100 dark:border-red-900/30 flex flex-col items-center justify-center">
+        <div className="text-red-600 dark:text-red-400 text-sm font-semibold uppercase mb-1">Alumnos Suspensos</div>
+        <div className="text-3xl font-bold text-red-700 dark:text-red-300">{stats.failed.toFixed(1)}%</div>
+      </div>
+      <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-xl border border-blue-100 dark:border-blue-900/30 flex flex-col items-center justify-center">
+        <div className="text-blue-600 dark:text-blue-400 text-sm font-semibold uppercase mb-1">Nota Media Curso</div>
+        <div className="text-3xl font-bold text-blue-700 dark:text-blue-300">{stats.avg.toFixed(2)}</div>
+      </div>
+    </div>
+  );
+};
+
 // --- APP ---
 
 export default function App() {
@@ -842,6 +902,23 @@ export default function App() {
   const [isNewCourseModalOpen, setIsNewCourseModalOpen] = useState(false);
   const [newCourseName, setNewCourseName] = useState('');
   const [view, setView] = useState('grades'); // 'grades' | 'config'
+
+  // Rename Course Modal State
+  const [renamingCourse, setRenamingCourse] = useState<Course | null>(null);
+  const [renameInput, setRenameInput] = useState('');
+
+  const openRenameModal = (course: Course, e: any) => {
+    e.stopPropagation();
+    setRenamingCourse(course);
+    setRenameInput(course.name);
+  };
+
+  const handleRenameCourse = () => {
+    if (renamingCourse && renameInput.trim()) {
+      updateCourse({ ...renamingCourse, name: renameInput });
+      setRenamingCourse(null);
+    }
+  };
 
   // MIGRACIÓN DE DATOS (Legacy Support)
   useEffect(() => {
@@ -1003,7 +1080,7 @@ export default function App() {
                       </h1>
                       <button
                         onClick={() => { setTempTitle(activeCourse.name); setIsEditingTitle(true); }}
-                        className="text-slate-400 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all p-1"
+                        className="text-slate-400 hover:text-indigo-600 transition-all p-1" // Removed opacity-0 group-hover:opacity-100
                         title="Editar nombre del curso"
                       >
                         <Pencil size={16} />
@@ -1090,22 +1167,34 @@ export default function App() {
                       >
                         <Card className="h-full p-6 hover:shadow-md transition-shadow relative group border-t-4 border-t-indigo-500 dark:border-t-indigo-500">
                           <div className="flex justify-between items-start mb-4">
-                            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">{course.name}</h3>
-                            <button
-                              onClick={(e) => deleteCourse(course.id, e)}
-                              className="text-slate-300 hover:text-red-500 dark:text-slate-600 dark:hover:text-red-400 transition-colors p-1"
-                            >
-                              <Trash2 size={18} />
-                            </button>
+                            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 line-clamp-1 mr-2" title={course.name}>{course.name}</h3>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={(e) => openRenameModal(course, e)}
+                                className="text-slate-300 hover:text-indigo-500 dark:text-slate-600 dark:hover:text-indigo-400 transition-colors p-1"
+                                title="Renombrar curso"
+                              >
+                                <Pencil size={18} />
+                              </button>
+                              <button
+                                onClick={(e) => deleteCourse(course.id, e)}
+                                className="text-slate-300 hover:text-red-500 dark:text-slate-600 dark:hover:text-red-400 transition-colors p-1"
+                                title="Borrar curso"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
                           </div>
                           <div className="space-y-2 text-sm text-slate-500 dark:text-slate-400">
                             <div className="flex items-center gap-2">
                               <Users size={16} /> <span>{course.students.length} Alumnos</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <PieChart size={16} /> <span>{course.evaluations ? course.evaluations.length : 0} Evaluaciones</span>
+                              <PieChart size={16} /> <span>{course.evaluations ? course.evaluations.length : 0} {course.evaluations && course.evaluations.length === 1 ? 'Evaluación' : 'Evaluaciones'}</span>
                             </div>
                           </div>
+
+                          <CourseStats course={course} compact={true} />
                           <div className="mt-6 flex items-center text-indigo-600 dark:text-indigo-400 text-sm font-medium">
                             Abrir Libro de Calificaciones →
                           </div>
@@ -1137,6 +1226,14 @@ export default function App() {
                 exit={{ opacity: 0, x: -20 }}
                 className="space-y-6"
               >
+                {/* Sección de Estadísticas del Curso */}
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
+                    <Target size={20} className="text-indigo-500" />
+                    Estadísticas del Curso
+                  </h3>
+                  <CourseStats course={activeCourse} />
+                </div>
 
                 {/* Tabs de Navegación del Curso */}
                 <div className="flex justify-between items-center">
@@ -1200,6 +1297,30 @@ export default function App() {
             <div className="flex justify-end gap-2 pt-4">
               <Button variant="ghost" onClick={() => setIsNewCourseModalOpen(false)}>Cancelar</Button>
               <Button onClick={createCourse}>Crear Curso</Button>
+            </div>
+          </div>
+        </Dialog>
+
+        {/* Modal Renombrar Curso */}
+        <Dialog
+          isOpen={!!renamingCourse}
+          onClose={() => setRenamingCourse(null)}
+          title="Renombrar Curso"
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nuevo Nombre</label>
+              <Input
+                value={renameInput}
+                onChange={(e: any) => setRenameInput(e.target.value)}
+                placeholder="Nombre del curso"
+                autoFocus
+                onKeyDown={(e: any) => e.key === 'Enter' && handleRenameCourse()}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="ghost" onClick={() => setRenamingCourse(null)}>Cancelar</Button>
+              <Button onClick={handleRenameCourse}>Guardar Cambios</Button>
             </div>
           </div>
         </Dialog>
