@@ -898,6 +898,15 @@ export default function App() {
   const [courses, setCourses] = useLocalStorage<Course[]>('gradebook_courses', []);
   const [darkMode, setDarkMode] = useLocalStorage('gradebook_theme', false);
 
+  // Sync dark mode with document element
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
+
   const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
   const [isNewCourseModalOpen, setIsNewCourseModalOpen] = useState(false);
   const [newCourseName, setNewCourseName] = useState('');
@@ -1045,7 +1054,7 @@ export default function App() {
   };
 
   return (
-    <div className={cn("min-h-screen font-sans transition-colors duration-300", darkMode ? "dark bg-slate-950" : "bg-slate-50")}>
+    <div className="min-h-screen font-sans transition-colors duration-300">
       <div className="dark:text-slate-100 transition-colors duration-300">
         {/* Header Global */}
         <header className="bg-white/80 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 transition-colors duration-300 backdrop-blur-md">
