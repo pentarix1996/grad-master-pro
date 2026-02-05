@@ -50,6 +50,8 @@ interface Student {
   id: string;
   name: string;
   grades: GradeMap;
+  overrideGrades?: { [evaluationId: string]: number | '' };
+  dismissedWarnings?: string[];
 }
 
 interface Course {
@@ -174,7 +176,10 @@ const calculateEvaluationGrade = (student: Student, evaluation: Evaluation) => {
 const calculateFinalCourseGrade = (student: Student, course: Course) => {
   let finalGrade = 0;
   course.evaluations.forEach(ev => {
-    const evalGrade = calculateEvaluationGrade(student, ev);
+    const overrideGrade = student.overrideGrades?.[ev.id];
+    const evalGrade = overrideGrade !== undefined && overrideGrade !== ''
+      ? overrideGrade
+      : calculateEvaluationGrade(student, ev);
     const weight = ev.weight === '' ? 0 : ev.weight;
     finalGrade += evalGrade * (weight / 100);
   });
@@ -475,8 +480,36 @@ const GlobalCourseConfig = ({ course, onUpdate }: { course: Course, onUpdate: (c
 // C. Libro de Notas Individual (Por Evaluación)
 const EvaluationGradebook = ({ course, evaluation, onUpdate }: { course: Course, evaluation: Evaluation, onUpdate: (c: Course) => void }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
+  const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
+  const [studentNameInput, setStudentNameInput] = useState('');
 
-  // Calcular estadísticas específicas de esta evaluación para mostrar
+  const openEditStudentModal = (student: Student) => {
+    setEditingStudentId(student.id);
+    setStudentNameInput(student.name);
+    setIsStudentModalOpen(true);
+  };
+
+  const saveStudent = () => {
+    if (!studentNameInput.trim()) return;
+
+    if (editingStudentId) {
+      const newStudents = course.students.map(s =>
+        s.id === editingStudentId ? { ...s, name: studentNameInput } : s
+      );
+      onUpdate({ ...course, students: newStudents });
+    }
+    setIsStudentModalOpen(false);
+    setEditingStudentId(null);
+    setStudentNameInput('');
+  };
+
+  const deleteStudent = (id: string) => {
+    if (confirm("¿Eliminar este alumno?")) {
+      onUpdate({ ...course, students: course.students.filter(s => s.id !== id) });
+    }
+  };
+
   const calculateStats = (student: Student) => {
     let weightedSum = 0;
     let hasWarning = false;
@@ -505,7 +538,6 @@ const EvaluationGradebook = ({ course, evaluation, onUpdate }: { course: Course,
       return;
     }
     const numValue = parseFloat(value);
-    // Permitir > 10 para mostrar la alerta
     const finalVal = isNaN(numValue) ? 0 : Math.max(0, numValue);
     updateStudentGrade(studentId, subsectionId, finalVal);
   };
@@ -520,6 +552,31 @@ const EvaluationGradebook = ({ course, evaluation, onUpdate }: { course: Course,
     onUpdate({ ...course, students: newStudents });
   }
 
+  const handleOverrideGradeChange = (studentId: string, value: string) => {
+    const newStudents = course.students.map(s => {
+      if (s.id === studentId) {
+        const newVal = value === '' ? '' : parseFloat(value);
+        const finalVal: number | '' = isNaN(newVal as number) ? '' : newVal;
+        const overrideGrades: { [evaluationId: string]: number | '' } = { ...s.overrideGrades, [evaluation.id]: finalVal };
+        return { ...s, overrideGrades };
+      }
+      return s;
+    });
+    onUpdate({ ...course, students: newStudents });
+  };
+
+  const dismissWarning = (studentId: string) => {
+    const warningId = `${studentId}-${evaluation.id}`;
+    const newStudents = course.students.map(s => {
+      if (s.id === studentId) {
+        const dismissed = s.dismissedWarnings || [];
+        return { ...s, dismissedWarnings: [...dismissed, warningId] };
+      }
+      return s;
+    });
+    onUpdate({ ...course, students: newStudents });
+  };
+
   const filteredStudents = course.students.filter(s =>
     s.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -531,8 +588,44 @@ const EvaluationGradebook = ({ course, evaluation, onUpdate }: { course: Course,
     return "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300";
   };
 
+  const evaluationStats = useMemo(() => {
+    if (!course.students || course.students.length === 0) return { approved: 0, failed: 0, avg: 0 };
+
+    let approvedCount = 0;
+    let sum = 0;
+
+    course.students.forEach(s => {
+      const override = s.overrideGrades?.[evaluation.id];
+      const grade = override !== undefined && override !== '' ? override : calculateEvaluationGrade(s, evaluation);
+      if (grade >= 5) approvedCount++;
+      sum += grade;
+    });
+
+    const total = course.students.length;
+    return {
+      approved: (approvedCount / total) * 100,
+      failed: ((total - approvedCount) / total) * 100,
+      avg: sum / total
+    };
+  }, [course.students, evaluation]);
+
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div className="bg-green-50 dark:bg-green-900/10 p-3 rounded-xl border border-green-100 dark:border-green-900/30 flex flex-col items-center justify-center">
+          <div className="text-green-600 dark:text-green-400 text-xs font-semibold uppercase mb-0.5">Aprobados</div>
+          <div className="text-xl font-bold text-green-700 dark:text-green-300">{evaluationStats.approved.toFixed(1)}%</div>
+        </div>
+        <div className="bg-red-50 dark:bg-red-900/10 p-3 rounded-xl border border-red-100 dark:border-red-900/30 flex flex-col items-center justify-center">
+          <div className="text-red-600 dark:text-red-400 text-xs font-semibold uppercase mb-0.5">Suspensos</div>
+          <div className="text-xl font-bold text-red-700 dark:text-red-300">{evaluationStats.failed.toFixed(1)}%</div>
+        </div>
+        <div className="bg-blue-50 dark:bg-blue-900/10 p-3 rounded-xl border border-blue-100 dark:border-blue-900/30 flex flex-col items-center justify-center">
+          <div className="text-blue-600 dark:text-blue-400 text-xs font-semibold uppercase mb-0.5">Media Evaluación</div>
+          <div className="text-xl font-bold text-blue-700 dark:text-blue-300">{evaluationStats.avg.toFixed(2)}</div>
+        </div>
+      </div>
+
       <div className="relative w-full sm:w-64 mb-4">
         <Input
           placeholder="Buscar alumno..."
@@ -563,14 +656,27 @@ const EvaluationGradebook = ({ course, evaluation, onUpdate }: { course: Course,
                   </th>
                 </React.Fragment>
               ))}
-              <th className="px-4 py-3 font-bold text-slate-900 dark:text-white bg-slate-100/50 dark:bg-slate-800 sticky right-0 z-10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)] text-center w-32 border-l border-slate-200 dark:border-slate-700">
+              <th className="px-3 py-3 font-bold text-slate-900 dark:text-white bg-slate-100/50 dark:bg-slate-800 text-center min-w-[90px] border-l border-slate-200 dark:border-slate-700">
                 Nota {evaluation.name}
+              </th>
+              <th className="px-3 py-3 font-bold text-purple-700 dark:text-purple-300 bg-purple-50/50 dark:bg-purple-900/20 text-center min-w-[90px] border-l border-purple-200 dark:border-purple-800">
+                Nota Real
+              </th>
+              <th className="px-2 py-3 w-20 text-center border-l border-slate-100 dark:border-slate-800">
+                Acciones
               </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {filteredStudents.map((student) => {
               const stats = calculateStats(student);
+              const overrideGrade = student.overrideGrades?.[evaluation.id];
+              const hasOverride = overrideGrade !== undefined && overrideGrade !== '';
+              const gradeDiff = hasOverride ? Math.abs((overrideGrade as number) - stats.finalGrade) : 0;
+              const showOverrideWarning = hasOverride && gradeDiff > 1;
+              const warningId = `${student.id}-${evaluation.id}`;
+              const isWarningDismissed = student.dismissedWarnings?.includes(warningId);
+
               return (
                 <React.Fragment key={student.id}>
                   <tr className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors group">
@@ -600,30 +706,95 @@ const EvaluationGradebook = ({ course, evaluation, onUpdate }: { course: Course,
                         </React.Fragment>
                       );
                     })}
-                    <td className="px-4 py-3 text-center sticky right-0 bg-white dark:bg-slate-900 z-10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)] border-l border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30 group-hover:bg-slate-100 dark:group-hover:bg-slate-800">
-                      <div className="flex items-center justify-center gap-2">
+                    <td className="px-3 py-3 text-center border-l border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
+                      <div className="flex items-center justify-center gap-1">
                         <span className={cn(
-                          "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold shadow-sm",
+                          "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold shadow-sm",
                           getGradeColorClass(stats.finalGrade)
                         )}>
                           {stats.finalGrade.toFixed(2)}
                         </span>
                         {stats.hasWarning && (
                           <div className="text-amber-500 animate-pulse" title="Nota > 10 detectada">
-                            <AlertTriangle size={16} />
+                            <AlertTriangle size={14} />
                           </div>
                         )}
                       </div>
                     </td>
+                    <td className="px-2 py-2 text-center border-l border-purple-200 dark:border-purple-800 bg-purple-50/20 dark:bg-purple-900/10">
+                      <div className="flex items-center justify-center gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          max="10"
+                          step="0.01"
+                          className={cn(
+                            "w-16 text-center bg-white dark:bg-slate-800 border rounded-md py-1 px-1 text-sm font-mono transition-all focus:ring-2 focus:ring-purple-500 outline-none",
+                            hasOverride
+                              ? "border-purple-300 dark:border-purple-600 text-purple-700 dark:text-purple-300"
+                              : "border-slate-200 dark:border-slate-700 text-slate-400"
+                          )}
+                          value={overrideGrade === undefined ? '' : overrideGrade}
+                          onChange={(e) => handleOverrideGradeChange(student.id, e.target.value)}
+                          placeholder="-"
+                        />
+                        {showOverrideWarning && !isWarningDismissed && (
+                          <div className="relative group/warn">
+                            <div className="text-amber-500 animate-pulse cursor-help" title="Diferencia > 1 punto">
+                              <AlertTriangle size={14} />
+                            </div>
+                            <button
+                              onClick={() => dismissWarning(student.id)}
+                              className="absolute -top-1 -right-1 bg-slate-100 dark:bg-slate-700 rounded-full p-0.5 opacity-0 group-hover/warn:opacity-100 transition-opacity hover:bg-red-100 dark:hover:bg-red-900/30"
+                              title="Cerrar aviso"
+                            >
+                              <X size={10} className="text-slate-500 hover:text-red-500" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-2 py-2 text-center border-l border-slate-100 dark:border-slate-800">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => openEditStudentModal(student)}
+                          className="text-slate-300 hover:text-indigo-600 dark:text-slate-600 dark:hover:text-indigo-400 p-1 transition-colors"
+                          title="Editar alumno"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => deleteStudent(student.id)}
+                          className="text-slate-300 hover:text-red-500 dark:text-slate-600 dark:hover:text-red-400 p-1 transition-colors"
+                          title="Eliminar alumno"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                   {stats.hasWarning && (
-                    <tr
-                      className="bg-amber-50 dark:bg-amber-900/10"
-                    >
+                    <tr className="bg-amber-50 dark:bg-amber-900/10">
                       <td colSpan={100} className="px-4 py-2 border-b border-amber-100 dark:border-amber-900/20">
                         <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400 font-medium justify-center">
                           <AlertTriangle size={12} />
                           <span>Atención: Se han detectado notas superiores a 10. Verifica si es correcto.</span>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {showOverrideWarning && !isWarningDismissed && (
+                    <tr className="bg-purple-50 dark:bg-purple-900/10">
+                      <td colSpan={100} className="px-4 py-2 border-b border-purple-100 dark:border-purple-900/20">
+                        <div className="flex items-center gap-2 text-xs text-purple-700 dark:text-purple-400 font-medium justify-center">
+                          <AlertTriangle size={12} />
+                          <span>Aviso: La Nota Real difiere en más de 1 punto de la nota calculada ({stats.finalGrade.toFixed(2)} vs {(overrideGrade as number).toFixed(2)})</span>
+                          <button
+                            onClick={() => dismissWarning(student.id)}
+                            className="ml-2 text-purple-500 hover:text-purple-700 dark:hover:text-purple-300 underline"
+                          >
+                            Ignorar
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -634,9 +805,33 @@ const EvaluationGradebook = ({ course, evaluation, onUpdate }: { course: Course,
           </tbody>
         </table>
       </div>
+
+      <Dialog
+        isOpen={isStudentModalOpen}
+        onClose={() => setIsStudentModalOpen(false)}
+        title="Editar Alumno"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nombre Completo</label>
+            <Input
+              value={studentNameInput}
+              onChange={(e: any) => setStudentNameInput(e.target.value)}
+              placeholder="Ej: Juan Pérez"
+              autoFocus
+              onKeyDown={(e: any) => e.key === 'Enter' && saveStudent()}
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="ghost" onClick={() => setIsStudentModalOpen(false)}>Cancelar</Button>
+            <Button onClick={saveStudent}>Guardar Cambios</Button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 };
+
 
 // D. Vista Global de Notas Finales y Selector
 const GlobalGradebook = ({ course, onUpdate }: { course: Course, onUpdate: (c: Course) => void }) => {
@@ -769,10 +964,23 @@ const GlobalGradebook = ({ course, onUpdate }: { course: Course, onUpdate: (c: C
                           </button>
                         </td>
                         {course.evaluations.map(ev => {
-                          const grade = calculateEvaluationGrade(student, ev);
+                          const calculatedGrade = calculateEvaluationGrade(student, ev);
+                          const overrideGrade = student.overrideGrades?.[ev.id];
+                          const hasOverride = overrideGrade !== undefined && overrideGrade !== '';
+                          const displayGrade = hasOverride ? overrideGrade as number : calculatedGrade;
                           return (
-                            <td key={ev.id} className="px-4 py-3 text-center text-slate-600 dark:text-slate-400">
-                              {grade.toFixed(2)}
+                            <td key={ev.id} className={cn(
+                              "px-4 py-3 text-center",
+                              hasOverride
+                                ? "text-purple-600 dark:text-purple-400 font-medium"
+                                : "text-slate-600 dark:text-slate-400"
+                            )}>
+                              <div className="flex items-center justify-center gap-1">
+                                {displayGrade.toFixed(2)}
+                                {hasOverride && (
+                                  <span className="text-[10px] text-purple-400 dark:text-purple-500" title={`Calculada: ${calculatedGrade.toFixed(2)}`}>★</span>
+                                )}
+                              </div>
                             </td>
                           )
                         })}
