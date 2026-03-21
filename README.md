@@ -1,7 +1,8 @@
-# GradMasterPro
+# GradMasterPro v1.1.0
 
 **GradMasterPro** is a modern, intuitive web application designed for educators to efficiently manage courses, students, and grades. Built with React and TypeScript, it offers a dynamic user interface for configuring weighted grading systems, tracking student performance, and analyzing class statistics in real-time.
 
+![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)
 ![Project Status](https://img.shields.io/badge/status-active-success.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
