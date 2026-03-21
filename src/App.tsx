@@ -131,16 +131,6 @@ const calculateFinalCourseGrade = (student: Student, course: Course) => {
   return finalGrade;
 }
 
-const calculatePureCourseGrade = (student: Student, course: Course) => {
-  let finalGrade = 0;
-  course.evaluations.forEach(ev => {
-    const evalGrade = calculateEvaluationGrade(student, ev);
-    const weight = ev.weight === '' ? 0 : ev.weight;
-    finalGrade += evalGrade * (weight / 100);
-  });
-  return finalGrade;
-}
-
 // --- COMPONENTES DE NEGOCIO ---
 
 // A. Configuración de una Evaluación Individual (Lo que antes era el Config Course)
@@ -836,6 +826,7 @@ const EvaluationGradebook = ({ course, evaluation, onUpdate }: { course: Course,
         <ReportCard 
           student={selectedStudentForReport}
           course={course}
+          onUpdateCourse={onUpdate}
           onClose={() => setSelectedStudentForReport(null)}
         />
       )}
@@ -1001,13 +992,11 @@ const GlobalGradebook = ({ course, onUpdate }: { course: Course, onUpdate: (c: C
                       </th>
                     ))}
                     <th className="px-4 py-3 text-center bg-indigo-50/20 dark:bg-indigo-900/10 text-indigo-800 dark:text-indigo-200 font-bold">Nota Curso</th>
-                    <th className="px-4 py-3 text-center bg-purple-50/20 dark:bg-purple-900/10 text-purple-800 dark:text-purple-200 font-bold">Nota Curso Real</th>
                     <th className="w-10"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {filteredStudents.map(student => {
-                    const pureGrade = calculatePureCourseGrade(student, course);
                     const finalGrade = calculateFinalCourseGrade(student, course);
                     return (
                       <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 group">
@@ -1046,15 +1035,12 @@ const GlobalGradebook = ({ course, onUpdate }: { course: Course, onUpdate: (c: C
                             </td>
                           )
                         })}
-                        <td className="px-4 py-3 text-center bg-indigo-50/10 dark:bg-indigo-900/5 font-bold text-indigo-600 dark:text-indigo-400">
-                          {pureGrade.toFixed(2)}
-                        </td>
-                        <td className="px-4 py-3 text-center bg-purple-50/10 dark:bg-purple-900/10 font-bold">
+                        <td className="px-4 py-3 text-center bg-indigo-50/10 dark:bg-indigo-900/5 font-bold">
                           <span className={cn(
                             "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium shadow-sm",
-                            getGradeColorClass(Math.trunc(finalGrade))
+                            getGradeColorClass(finalGrade)
                           )}>
-                            {Math.trunc(finalGrade)}
+                            {finalGrade.toFixed(2)}
                           </span>
                         </td>
                         <td className="px-2 text-center">
@@ -1113,6 +1099,7 @@ const GlobalGradebook = ({ course, onUpdate }: { course: Course, onUpdate: (c: C
         <ReportCard 
           student={selectedStudentForReport}
           course={course}
+          onUpdateCourse={onUpdate}
           onClose={() => setSelectedStudentForReport(null)}
         />
       )}
@@ -1626,7 +1613,7 @@ export default function App() {
       
       {/* Indicador de Versión */}
       <div className="fixed bottom-4 right-4 text-xs font-mono text-slate-400 dark:text-slate-600 font-medium z-50 pointer-events-none">
-        v1.1.0
+        v1.2.0
       </div>
     </div>
   );

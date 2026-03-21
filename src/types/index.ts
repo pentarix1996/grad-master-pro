@@ -21,12 +21,19 @@ export interface GradeMap {
   [key: string]: number | string; // subsectionId -> grade
 }
 
+export interface StudentNote {
+  id: string;
+  text: string;
+  date: string;
+}
+
 export interface Student {
   id: string;
   name: string;
   grades: GradeMap;
   overrideGrades?: { [evaluationId: string]: number | '' };
   dismissedWarnings?: string[];
+  notes?: StudentNote[];
 }
 
 export interface Course {

@@ -83,6 +83,7 @@ export const CourseReport: React.FC<CourseReportProps> = ({ course, onClose }) =
 
     return {
       name: student.name,
+      notes: student.notes || [],
       evaluations: gradesPerEval,
       globalFinal: Number(globalFinal.toFixed(2))
     };
@@ -219,49 +220,64 @@ export const CourseReport: React.FC<CourseReportProps> = ({ course, onClose }) =
               
               <div className="flex flex-col gap-6">
                 {studentOverviews.map((student, idx) => (
-                  <div key={idx} className="border border-slate-300 rounded-lg p-5 no-break bg-white shadow-sm flex flex-col md:flex-row gap-6 items-start">
-                    
-                    {/* Alumno Info */}
-                    <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-200 pb-4 md:pb-0 pr-4">
-                      <h3 className="text-xl font-heading font-bold text-slate-900 mb-2">{student.name}</h3>
-                      <div className="text-sm text-slate-500 mb-1">Nota Ponderada Global</div>
-                      <div className={cn("text-3xl font-bold font-mono", getStatusColor(student.globalFinal))}>
-                        {student.globalFinal.toFixed(2)}
+                  <div key={idx} className="border border-slate-300 rounded-lg p-5 no-break bg-white shadow-sm flex flex-col gap-4">
+                    <div className="flex flex-col md:flex-row gap-6 items-start">
+                      {/* Alumno Info */}
+                      <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-200 pb-4 md:pb-0 pr-4">
+                        <h3 className="text-xl font-heading font-bold text-slate-900 mb-2">{student.name}</h3>
+                        <div className="text-sm text-slate-500 mb-1">Nota Ponderada Global</div>
+                        <div className={cn("text-3xl font-bold font-mono", getStatusColor(student.globalFinal))}>
+                          {student.globalFinal.toFixed(2)}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Evaluaciones del Alumno */}
-                    <div className="w-full md:w-2/3 flex flex-col gap-3">
-                      {student.evaluations.map((evStat, eIdx) => {
-                        const isImprovement = evStat.diff > 0;
-                        const isDrop = evStat.diff < 0;
-                        
-                        return (
-                          <div key={eIdx} className="flex items-center justify-between bg-slate-50 p-2 px-4 rounded border border-slate-100">
-                            <div className="font-medium text-slate-700 text-sm">{evStat.evalName}</div>
-                            
-                            <div className="flex items-center gap-6">
-                              <div className="text-right">
-                                <div className="text-[10px] uppercase text-slate-400 font-bold">Nota</div>
-                                <div className={cn("font-bold text-base", getStatusColor(evStat.grade))}>{evStat.grade.toFixed(2)}</div>
-                              </div>
+                      {/* Evaluaciones del Alumno */}
+                      <div className="w-full md:w-2/3 flex flex-col gap-3">
+                        {student.evaluations.map((evStat, eIdx) => {
+                          const isImprovement = evStat.diff > 0;
+                          const isDrop = evStat.diff < 0;
+                          
+                          return (
+                            <div key={eIdx} className="flex items-center justify-between bg-slate-50 p-2 px-4 rounded border border-slate-100">
+                              <div className="font-medium text-slate-700 text-sm">{evStat.evalName}</div>
                               
-                              <div className="w-px h-8 bg-slate-200"></div>
-                              
-                              <div className="text-right w-24">
-                                <div className="text-[10px] uppercase text-slate-400 font-bold">VS Media Clase</div>
-                                <div className={cn("font-bold text-sm flex items-center justify-end gap-1", getDiffColor(evStat.diff))}>
-                                  {evStat.diff > 0 ? '+' : ''}{evStat.diff.toFixed(2)} pts
-                                  {isImprovement && <TrendingUp size={14} />}
-                                  {isDrop && <TrendingDown size={14} />}
+                              <div className="flex items-center gap-6">
+                                <div className="text-right">
+                                  <div className="text-[10px] uppercase text-slate-400 font-bold">Nota</div>
+                                  <div className={cn("font-bold text-base", getStatusColor(evStat.grade))}>{evStat.grade.toFixed(2)}</div>
+                                </div>
+                                
+                                <div className="w-px h-8 bg-slate-200"></div>
+                                
+                                <div className="text-right w-24">
+                                  <div className="text-[10px] uppercase text-slate-400 font-bold">VS Media Clase</div>
+                                  <div className={cn("font-bold text-sm flex items-center justify-end gap-1", getDiffColor(evStat.diff))}>
+                                    {evStat.diff > 0 ? '+' : ''}{evStat.diff.toFixed(2)} pts
+                                    {isImprovement && <TrendingUp size={14} />}
+                                    {isDrop && <TrendingDown size={14} />}
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        )
-                      })}
+                          )
+                        })}
+                      </div>
                     </div>
 
+                    {/* Notas del alumno */}
+                    {student.notes.length > 0 && (
+                      <div className="mt-2 text-sm bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <h4 className="font-semibold text-slate-800 mb-2 border-b border-slate-200 pb-2">Anotaciones Destacadas</h4>
+                        <ul className="space-y-2">
+                          {student.notes.map((note) => (
+                            <li key={note.id} className="text-slate-800 leading-snug">
+                              <strong className="text-slate-500 text-xs mr-2 font-medium">{note.date}:</strong>
+                              {note.text}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

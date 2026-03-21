@@ -1,6 +1,6 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Download, TrendingUp, TrendingDown, BookOpen } from 'lucide-react';
+import { X, Download, TrendingUp, TrendingDown, BookOpen, Plus, Trash2, Pencil } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
@@ -10,11 +10,50 @@ import type { Student, Course } from '../types';
 interface ReportCardProps {
   student: Student;
   course: Course;
+  onUpdateCourse: (course: Course) => void;
   onClose: () => void;
 }
 
-export const ReportCard: React.FC<ReportCardProps> = ({ student, course, onClose }) => {
+export const ReportCard: React.FC<ReportCardProps> = ({ student: initialStudent, course, onUpdateCourse, onClose }) => {
+  const student = course.students.find(s => s.id === initialStudent.id) || initialStudent;
   const componentRef = useRef<HTMLDivElement>(null);
+  const [newNoteText, setNewNoteText] = useState('');
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editNoteText, setEditNoteText] = useState('');
+
+  const handleAddNote = () => {
+    if (!newNoteText.trim()) return;
+    const newNote = {
+      id: Math.random().toString(36).substr(2, 9),
+      text: newNoteText,
+      date: new Date().toLocaleDateString()
+    };
+    const updatedStudent = { ...student, notes: [...(student.notes || []), newNote] };
+    const newStudents = course.students.map(s => s.id === student.id ? updatedStudent : s);
+    onUpdateCourse({ ...course, students: newStudents });
+    setNewNoteText('');
+  };
+
+  const handleUpdateNote = (noteId: string) => {
+    if (!editNoteText.trim()) return;
+    const updatedStudent = {
+      ...student,
+      notes: (student.notes || []).map(n => n.id === noteId ? { ...n, text: editNoteText } : n)
+    };
+    const newStudents = course.students.map(s => s.id === student.id ? updatedStudent : s);
+    onUpdateCourse({ ...course, students: newStudents });
+    setEditingNoteId(null);
+  };
+
+  const handleDeleteNote = (noteId: string) => {
+    if (!confirm('¿Seguro que quieres borrar esta nota?')) return;
+    const updatedStudent = {
+      ...student,
+      notes: (student.notes || []).filter(n => n.id !== noteId)
+    };
+    const newStudents = course.students.map(s => s.id === student.id ? updatedStudent : s);
+    onUpdateCourse({ ...course, students: newStudents });
+  };
 
   const handlePrint = useReactToPrint({
     contentRef: componentRef,
@@ -158,6 +197,66 @@ export const ReportCard: React.FC<ReportCardProps> = ({ student, course, onClose
                   );
                 })}
               </div>
+            </div>
+          </div>
+          <div className="mt-8 border-t border-slate-100 dark:border-slate-800 pt-8 no-break avoid-break-after">
+            <h3 className="text-lg font-heading font-semibold text-slate-800 dark:text-slate-200 mb-4">Anotaciones del Alumno</h3>
+            
+            <div className="space-y-3 mb-6">
+              {(student.notes || []).length === 0 ? (
+                <div className="text-sm text-slate-500 italic">No hay anotaciones registradas.</div>
+              ) : (
+                (student.notes || []).map(note => (
+                  <div key={note.id} className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="text-xs font-semibold text-slate-400 mb-1">{note.date}</div>
+                        {editingNoteId === note.id ? (
+                          <div className="mt-2 pr-4">
+                            <textarea 
+                              className="w-full text-sm p-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-indigo-500" 
+                              rows={3} 
+                              value={editNoteText} 
+                              onChange={e => setEditNoteText(e.target.value)} 
+                            />
+                            <div className="flex gap-2 mt-2">
+                              <button onClick={() => handleUpdateNote(note.id)} className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded hover:bg-indigo-700">Guardar</button>
+                              <button onClick={() => setEditingNoteId(null)} className="text-xs bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-3 py-1.5 rounded hover:bg-slate-300 dark:hover:bg-slate-600">Cancelar</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{note.text}</div>
+                        )}
+                      </div>
+                      
+                      {editingNoteId !== note.id && (
+                        <div className="flex gap-2 ml-4 print:hidden">
+                          <button onClick={() => { setEditingNoteId(note.id); setEditNoteText(note.text); }} className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1 cursor-pointer transition-colors" title="Editar nota"><Pencil size={14} /></button>
+                          <button onClick={() => handleDeleteNote(note.id)} className="text-slate-400 hover:text-red-500 p-1 cursor-pointer transition-colors" title="Borrar nota"><Trash2 size={14} /></button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-4 print:hidden">
+              <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2"><Plus size={16} className="text-indigo-500" /> Nueva Anotación</h4>
+              <textarea 
+                className="w-full text-sm p-3 border border-slate-300 dark:border-slate-700 rounded-md bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-indigo-500 resize-y" 
+                rows={3} 
+                placeholder="Escribe una observación, comportamiento o nota acerca de la evolución del alumno..."
+                value={newNoteText} 
+                onChange={e => setNewNoteText(e.target.value)}
+              />
+              <button 
+                onClick={handleAddNote}
+                disabled={!newNoteText.trim()}
+                className="mt-3 bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                Guardar Anotación
+              </button>
             </div>
           </div>
           
