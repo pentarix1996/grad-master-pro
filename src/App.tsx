@@ -18,82 +18,18 @@ import {
   PieChart,
   ListChecks,
   Target,
-  Info
+  Info,
+  TrendingDown,
+  TrendingUp,
+  FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
-// --- TYPES ---
-
-interface Subsection {
-  id: string;
-  name: string;
-}
-
-interface Section {
-  id: string;
-  name: string;
-  weight: number | '';
-  subsections: Subsection[];
-}
-
-interface Evaluation {
-  id: string;
-  name: string;
-  weight: number | '';
-  sections: Section[];
-}
-
-interface GradeMap {
-  [key: string]: number | string; // subsectionId -> grade
-}
-
-interface Student {
-  id: string;
-  name: string;
-  grades: GradeMap;
-  overrideGrades?: { [evaluationId: string]: number | '' };
-  dismissedWarnings?: string[];
-}
-
-interface Course {
-  id: string;
-  name: string;
-  evaluations: Evaluation[];
-  students: Student[];
-  // Legacy support
-  sections?: Section[];
-}
-
-// --- UTILS & HOOKS ---
-
-const generateId = () => Math.random().toString(36).substr(2, 9);
-
-function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T | ((val: T) => T)) => void] {
-  const [storedValue, setStoredValue] = useState<T>(() => {
-    try {
-      const item = window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
-    } catch (error) {
-      console.error(error);
-      return initialValue;
-    }
-  });
-
-  const setValue = (value: T | ((val: T) => T)) => {
-    try {
-      const valueToStore = value instanceof Function ? value(storedValue) : value;
-      setStoredValue(valueToStore);
-      window.localStorage.setItem(key, JSON.stringify(valueToStore));
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  return [storedValue, setValue];
-}
-
-const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(' ');
-
+import type { Course, Evaluation, Section, Student } from './types';
+import { useLocalStorage } from './hooks/useLocalStorage';
+import { cn, generateId } from './lib/utils';
+import { ReportCard } from './components/ReportCard';
+import { RubricModal } from './components/RubricModal';
+import { CourseReport } from './components/CourseReport';
 // --- COMPONENTES UI (Mini Design System) ---
 
 const Button = ({ children, variant = 'primary', className, ...props }: any) => {
@@ -189,6 +125,16 @@ const calculateFinalCourseGrade = (student: Student, course: Course) => {
     const evalGrade = overrideGrade !== undefined && overrideGrade !== ''
       ? overrideGrade
       : calculateEvaluationGrade(student, ev);
+    const weight = ev.weight === '' ? 0 : ev.weight;
+    finalGrade += (evalGrade as number) * (weight / 100);
+  });
+  return finalGrade;
+}
+
+const calculatePureCourseGrade = (student: Student, course: Course) => {
+  let finalGrade = 0;
+  course.evaluations.forEach(ev => {
+    const evalGrade = calculateEvaluationGrade(student, ev);
     const weight = ev.weight === '' ? 0 : ev.weight;
     finalGrade += evalGrade * (weight / 100);
   });
@@ -492,6 +438,9 @@ const EvaluationGradebook = ({ course, evaluation, onUpdate }: { course: Course,
   const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [studentNameInput, setStudentNameInput] = useState('');
+  
+  const [selectedStudentForReport, setSelectedStudentForReport] = useState<Student | null>(null);
+  const [rubricTarget, setRubricTarget] = useState<{ studentId: string, subsectionId: string, currentGrade: number | string } | null>(null);
 
   const openEditStudentModal = (student: Student) => {
     setEditingStudentId(student.id);
@@ -703,25 +652,68 @@ const EvaluationGradebook = ({ course, evaluation, onUpdate }: { course: Course,
               const warningId = `${student.id}-${evaluation.id}`;
               const isWarningDismissed = student.dismissedWarnings?.includes(warningId);
 
+              // Lógica de Alerta Temprana (Early Warning)
+              let trendWarning = false;
+              let trendImprovement = false;
+              const evalIndex = course.evaluations.findIndex(e => e.id === evaluation.id);
+              if (evalIndex > 0) {
+                const prevEval = course.evaluations[evalIndex - 1];
+                let prevEvalSum = 0;
+                prevEval.sections.forEach(sec => {
+                  let subSum = 0;
+                  let validCount = 0;
+                  sec.subsections.forEach(sub => {
+                    const rawVal = student.grades[sub.id];
+                    if (typeof rawVal === 'string' && rawVal.trim().toUpperCase() === 'NE') return;
+                    validCount++;
+                    const val = parseFloat((rawVal as string) || '0');
+                    subSum += isNaN(val) ? 0 : Math.max(0, val);
+                  });
+                  const avg = validCount > 0 ? subSum / validCount : 0;
+                  const weight = sec.weight === '' ? 0 : sec.weight;
+                  prevEvalSum += avg * (weight / 100);
+                });
+                const prevOverride = student.overrideGrades?.[prevEval.id];
+                const prevFinal = prevOverride !== undefined && prevOverride !== '' ? prevOverride : prevEvalSum;
+                const currentFinal = hasOverride ? overrideGrade : stats.finalGrade;
+                
+                if ((prevFinal as number) - (currentFinal as number) >= 1.5) {
+                  trendWarning = true;
+                } else if ((currentFinal as number) - (prevFinal as number) >= 1.5) {
+                  trendImprovement = true;
+                }
+              }
+
               return (
                 <React.Fragment key={student.id}>
                   <tr className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors group">
                     <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100 sticky left-0 bg-white dark:bg-slate-900 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50 border-r border-slate-100 dark:border-slate-800">
-                      {student.name}
+                      <button onClick={() => setSelectedStudentForReport(student)} className="hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline flex items-center gap-2 cursor-pointer text-left w-full transition-colors" title="Ver Perfil y PDF">
+                        {student.name}
+                      </button>
                     </td>
                     {evaluation.sections.map(section => {
                       const sectionStat = stats.sectionAverages.find(s => s.id === section.id);
                       return (
                         <React.Fragment key={section.id}>
                           {section.subsections.map(sub => (
-                            <td key={sub.id} className="px-1 py-2 border-l border-slate-100 dark:border-slate-800 p-0">
-                              <input
-                                type="text"
-                                className="w-full h-full text-center bg-transparent focus:bg-indigo-50/30 dark:focus:bg-indigo-900/20 focus:ring-2 focus:ring-indigo-500 rounded-none py-2 outline-none transition-all hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-200 placeholder-slate-300 dark:placeholder-slate-600 font-mono text-sm uppercase"
-                                value={student.grades[sub.id] === undefined ? '' : student.grades[sub.id]}
-                                onChange={(e) => handleGradeChange(student.id, sub.id, e.target.value)}
-                                placeholder="-"
-                              />
+                            <td key={sub.id} className="px-1 py-1 border-l border-slate-100 dark:border-slate-800 p-0 relative group/input">
+                              <div className="flex items-center h-full w-full relative">
+                                <input
+                                  type="text"
+                                  className="w-full h-full text-center bg-transparent focus:bg-indigo-50/30 dark:focus:bg-indigo-900/20 focus:ring-2 focus:ring-indigo-500 rounded-none py-2 outline-none transition-all hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-200 placeholder-slate-300 dark:placeholder-slate-600 font-mono text-sm uppercase"
+                                  value={student.grades[sub.id] === undefined ? '' : student.grades[sub.id]}
+                                  onChange={(e) => handleGradeChange(student.id, sub.id, e.target.value)}
+                                  placeholder="-"
+                                />
+                                <button 
+                                  onClick={() => setRubricTarget({ studentId: student.id, subsectionId: sub.id, currentGrade: student.grades[sub.id] === undefined ? '' : student.grades[sub.id] })}
+                                  className="absolute right-1 opacity-0 group-hover/input:opacity-100 p-0.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-opacity cursor-pointer bg-white/80 dark:bg-slate-900/80 rounded" 
+                                  title="Usar Rúbrica Analítica"
+                                >
+                                  <ListChecks size={14} />
+                                </button>
+                              </div>
                             </td>
                           ))}
                           <td className="px-2 py-2 text-center font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50/20 dark:bg-indigo-900/10 border-l border-indigo-100/50 dark:border-indigo-900/30">
@@ -741,6 +733,16 @@ const EvaluationGradebook = ({ course, evaluation, onUpdate }: { course: Course,
                         {stats.hasWarning && (
                           <div className="text-amber-500 animate-pulse" title="Nota > 10 detectada">
                             <AlertTriangle size={14} />
+                          </div>
+                        )}
+                        {trendWarning && (
+                          <div className="text-red-500" title="Alerta Temprana: Fuerte caída de rendimiento (> 1.5 puntos respecto a anterior evaluación)">
+                            <TrendingDown size={14} />
+                          </div>
+                        )}
+                        {trendImprovement && (
+                          <div className="text-green-500" title="Mejora Destacable: Fuerte subida de rendimiento (> 1.5 puntos respecto a anterior evaluación)">
+                            <TrendingUp size={14} />
                           </div>
                         )}
                       </div>
@@ -830,6 +832,25 @@ const EvaluationGradebook = ({ course, evaluation, onUpdate }: { course: Course,
         </table>
       </div>
 
+      {selectedStudentForReport && (
+        <ReportCard 
+          student={selectedStudentForReport}
+          course={course}
+          onClose={() => setSelectedStudentForReport(null)}
+        />
+      )}
+      
+      {rubricTarget && (
+        <RubricModal
+          initialGrade={rubricTarget.currentGrade}
+          onSave={(val) => {
+            handleGradeChange(rubricTarget.studentId, rubricTarget.subsectionId, val.toString());
+            setRubricTarget(null);
+          }}
+          onClose={() => setRubricTarget(null)}
+        />
+      )}
+      
       <Dialog
         isOpen={isStudentModalOpen}
         onClose={() => setIsStudentModalOpen(false)}
@@ -865,6 +886,8 @@ const GlobalGradebook = ({ course, onUpdate }: { course: Course, onUpdate: (c: C
   const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [studentNameInput, setStudentNameInput] = useState('');
+  const [isCourseReportOpen, setIsCourseReportOpen] = useState(false);
+  const [selectedStudentForReport, setSelectedStudentForReport] = useState<Student | null>(null);
 
   const openAddStudentModal = () => {
     setEditingStudentId(null);
@@ -942,9 +965,17 @@ const GlobalGradebook = ({ course, onUpdate }: { course: Course, onUpdate: (c: C
             </button>
           ))}
         </div>
-        <Button onClick={openAddStudentModal}>
-          <Plus size={16} className="mr-2" /> Alumno
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            onClick={() => setIsCourseReportOpen(true)} 
+            className="bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 shadow-sm"
+          >
+            <FileText size={16} className="mr-2" /> Informe Claustro
+          </Button>
+          <Button onClick={openAddStudentModal}>
+            <Plus size={16} className="mr-2" /> Alumno
+          </Button>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm min-h-[400px]">
@@ -970,16 +1001,23 @@ const GlobalGradebook = ({ course, onUpdate }: { course: Course, onUpdate: (c: C
                       </th>
                     ))}
                     <th className="px-4 py-3 text-center bg-indigo-50/20 dark:bg-indigo-900/10 text-indigo-800 dark:text-indigo-200 font-bold">Nota Curso</th>
+                    <th className="px-4 py-3 text-center bg-purple-50/20 dark:bg-purple-900/10 text-purple-800 dark:text-purple-200 font-bold">Nota Curso Real</th>
                     <th className="w-10"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {filteredStudents.map(student => {
+                    const pureGrade = calculatePureCourseGrade(student, course);
                     const finalGrade = calculateFinalCourseGrade(student, course);
                     return (
                       <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 group">
                         <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100 sticky left-0 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50 z-10 flex justify-between items-center gap-2">
-                          {student.name}
+                          <button 
+                            onClick={() => setSelectedStudentForReport(student)}
+                            className="text-left hover:underline hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                          >
+                            {student.name}
+                          </button>
                           <button
                             onClick={() => openEditStudentModal(student)}
                             className="text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1008,12 +1046,15 @@ const GlobalGradebook = ({ course, onUpdate }: { course: Course, onUpdate: (c: C
                             </td>
                           )
                         })}
-                        <td className="px-4 py-3 text-center bg-indigo-50/10 dark:bg-indigo-900/5 font-bold">
+                        <td className="px-4 py-3 text-center bg-indigo-50/10 dark:bg-indigo-900/5 font-bold text-indigo-600 dark:text-indigo-400">
+                          {pureGrade.toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3 text-center bg-purple-50/10 dark:bg-purple-900/10 font-bold">
                           <span className={cn(
-                            "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
-                            getGradeColorClass(finalGrade)
+                            "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium shadow-sm",
+                            getGradeColorClass(Math.trunc(finalGrade))
                           )}>
-                            {finalGrade.toFixed(2)}
+                            {Math.trunc(finalGrade)}
                           </span>
                         </td>
                         <td className="px-2 text-center">
@@ -1060,6 +1101,21 @@ const GlobalGradebook = ({ course, onUpdate }: { course: Course, onUpdate: (c: C
           </div>
         </div>
       </Dialog>
+      
+      {isCourseReportOpen && (
+        <CourseReport 
+          course={course}
+          onClose={() => setIsCourseReportOpen(false)}
+        />
+      )}
+      
+      {selectedStudentForReport && (
+        <ReportCard 
+          student={selectedStudentForReport}
+          course={course}
+          onClose={() => setSelectedStudentForReport(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1566,6 +1622,11 @@ export default function App() {
           </div>
         </Dialog>
 
+      </div>
+      
+      {/* Indicador de Versión */}
+      <div className="fixed bottom-4 right-4 text-xs font-mono text-slate-400 dark:text-slate-600 font-medium z-50 pointer-events-none">
+        v1.1.0
       </div>
     </div>
   );
