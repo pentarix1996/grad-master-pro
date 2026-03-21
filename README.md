@@ -1,8 +1,8 @@
-# GradMasterPro v1.1.0
+# GradMasterPro v1.2.0
 
 **GradMasterPro** is a modern, intuitive web application designed for educators to efficiently manage courses, students, and grades. Built with React and TypeScript, it offers a dynamic user interface for configuring weighted grading systems, tracking student performance, and analyzing class statistics in real-time.
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)
 ![Project Status](https://img.shields.io/badge/status-active-success.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
@@ -13,7 +13,9 @@
 *   **Interactive Gradebook**:
     *   Add and manage students.
     *   Input grades with real-time calculation of weighted averages.
+    *   Support for "NE" (Not Evaluable) grades that do not penalize the statistical average.
     *   Visual feedback on grades (color-coded performance).
+*   **Student Notes**: Add, edit, and read specific behavior or academic notes for individual students on their Report Cards and print them in Faculty Reports.
 *   **Real-Time Statistics**: View class averages, highest/lowest grades, and distribution charts.
 *   **Data Persistence**: Automatically saves your work to local storage so you never lose data.
 *   **Import/Export**: Backup and restore your course data via JSON files.
