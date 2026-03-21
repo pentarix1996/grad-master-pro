@@ -17,7 +17,8 @@ import {
   Moon,
   PieChart,
   ListChecks,
-  Target
+  Target,
+  Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -159,12 +160,20 @@ const calculateEvaluationGrade = (student: Student, evaluation: Evaluation) => {
   let weightedSum = 0;
 
   evaluation.sections.forEach(section => {
-    const subGrades = section.subsections.map(sub => {
-      const val = parseFloat((student.grades[sub.id] as string) || '0');
-      return isNaN(val) ? 0 : val;
+    let validCount = 0;
+    let sum = 0;
+
+    section.subsections.forEach(sub => {
+      const rawVal = student.grades[sub.id];
+      if (typeof rawVal === 'string' && rawVal.trim().toUpperCase() === 'NE') {
+        return;
+      }
+      validCount++;
+      const val = parseFloat((rawVal as string) || '0');
+      sum += isNaN(val) ? 0 : Math.max(0, val);
     });
-    const sum = subGrades.reduce((a, b) => a + b, 0);
-    const avg = section.subsections.length > 0 ? sum / section.subsections.length : 0;
+
+    const avg = validCount > 0 ? sum / validCount : 0;
 
     const weight = section.weight === '' ? 0 : section.weight;
     weightedSum += avg * (weight / 100);
@@ -515,13 +524,20 @@ const EvaluationGradebook = ({ course, evaluation, onUpdate }: { course: Course,
     let hasWarning = false;
 
     const sectionAverages = evaluation.sections.map(section => {
-      const subGrades = section.subsections.map(sub => {
-        const val = parseFloat((student.grades[sub.id] as string) || '0');
+      let validCount = 0;
+      let sum = 0;
+
+      section.subsections.forEach(sub => {
+        const rawVal = student.grades[sub.id];
+        if (typeof rawVal === 'string' && rawVal.trim().toUpperCase() === 'NE') {
+          return;
+        }
+        validCount++;
+        const val = parseFloat((rawVal as string) || '0');
         if (val > 10) hasWarning = true;
-        return val;
+        sum += isNaN(val) ? 0 : Math.max(0, val);
       });
-      const sum = subGrades.reduce((a, b) => a + b, 0);
-      const avg = section.subsections.length > 0 ? sum / section.subsections.length : 0;
+      const avg = validCount > 0 ? sum / validCount : 0;
 
       const weight = section.weight === '' ? 0 : section.weight;
       weightedSum += avg * (weight / 100);
@@ -537,12 +553,14 @@ const EvaluationGradebook = ({ course, evaluation, onUpdate }: { course: Course,
       updateStudentGrade(studentId, subsectionId, '');
       return;
     }
-    const numValue = parseFloat(value);
-    const finalVal = isNaN(numValue) ? 0 : Math.max(0, numValue);
-    updateStudentGrade(studentId, subsectionId, finalVal);
+    if (value.trim().toUpperCase() === 'NE') {
+      updateStudentGrade(studentId, subsectionId, 'NE');
+      return;
+    }
+    updateStudentGrade(studentId, subsectionId, value);
   };
 
-  const updateStudentGrade = (studentId: string, subsectionId: string, val: number | '') => {
+  const updateStudentGrade = (studentId: string, subsectionId: string, val: number | string) => {
     const newStudents = course.students.map(s => {
       if (s.id === studentId) {
         return { ...s, grades: { ...s.grades, [subsectionId]: val } };
@@ -626,6 +644,14 @@ const EvaluationGradebook = ({ course, evaluation, onUpdate }: { course: Course,
         </div>
       </div>
 
+      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 rounded-xl p-3 flex gap-3 text-sm text-blue-800 dark:text-blue-300 mb-4">
+        <Info className="shrink-0 mt-0.5 text-blue-500 dark:text-blue-400" size={18} />
+        <div>
+          <span className="font-semibold block mb-0.5">Información sobre notas "NE"</span>
+          Puedes escribir <strong>NE</strong> (No Evaluable) en la nota de cualquier alumno para que no cuente en la media de esa sección. Cualquier celda vacía u otro texto se calculará como un 0.
+        </div>
+      </div>
+
       <div className="relative w-full sm:w-64 mb-4">
         <Input
           placeholder="Buscar alumno..."
@@ -690,10 +716,8 @@ const EvaluationGradebook = ({ course, evaluation, onUpdate }: { course: Course,
                           {section.subsections.map(sub => (
                             <td key={sub.id} className="px-1 py-2 border-l border-slate-100 dark:border-slate-800 p-0">
                               <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                className="w-full h-full text-center bg-transparent focus:bg-indigo-50/30 dark:focus:bg-indigo-900/20 focus:ring-2 focus:ring-indigo-500 rounded-none py-2 outline-none transition-all hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-200 placeholder-slate-300 dark:placeholder-slate-600 font-mono text-sm"
+                                type="text"
+                                className="w-full h-full text-center bg-transparent focus:bg-indigo-50/30 dark:focus:bg-indigo-900/20 focus:ring-2 focus:ring-indigo-500 rounded-none py-2 outline-none transition-all hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-200 placeholder-slate-300 dark:placeholder-slate-600 font-mono text-sm uppercase"
                                 value={student.grades[sub.id] === undefined ? '' : student.grades[sub.id]}
                                 onChange={(e) => handleGradeChange(student.id, sub.id, e.target.value)}
                                 placeholder="-"
