@@ -21,3 +21,9 @@
     font-family: var(--font-heading);
   }
 }
+
+@layer utilities {
+  .font-bold {
+    font-weight: 500;
+  }
+}
