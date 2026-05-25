@@ -3,12 +3,25 @@ import { motion } from 'framer-motion';
 import { X, Download, TrendingUp, TrendingDown, BookOpen, Users, BrainCircuit } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
 import type { Course } from '../types';
-import { cn } from '../lib/utils';
+import { cn, parseLocalizedNumber } from '../lib/utils';
+import { getCourseRiskProfiles, RISK_LEVEL, type StudentRiskProfile } from '../lib/gradeAnalytics';
 
 interface CourseReportProps {
   course: Course;
   onClose: () => void;
 }
+
+const getRiskLabel = (level: StudentRiskProfile['level']) => {
+  if (level === RISK_LEVEL.HIGH) return 'Alto';
+  if (level === RISK_LEVEL.MEDIUM) return 'Seguimiento';
+  return 'Bajo';
+};
+
+const getRiskPrintClasses = (level: StudentRiskProfile['level']) => {
+  if (level === RISK_LEVEL.HIGH) return 'bg-red-50 text-red-700 border-red-200';
+  if (level === RISK_LEVEL.MEDIUM) return 'bg-amber-50 text-amber-700 border-amber-200';
+  return 'bg-green-50 text-green-700 border-green-200';
+};
 
 export const CourseReport: React.FC<CourseReportProps> = ({ course, onClose }) => {
   const componentRef = useRef<HTMLDivElement>(null);
@@ -17,6 +30,9 @@ export const CourseReport: React.FC<CourseReportProps> = ({ course, onClose }) =
     contentRef: componentRef,
     documentTitle: `Informe_Claustro_${course.name.replace(/\s+/g, '_')}`,
   });
+
+  const riskProfiles = getCourseRiskProfiles(course);
+  const actionableRiskProfiles = riskProfiles.filter(profile => profile.level !== RISK_LEVEL.LOW);
 
   // Cálculo de estadísticas globales
   const evaluationsStats = course.evaluations.map(ev => {
@@ -33,7 +49,7 @@ export const CourseReport: React.FC<CourseReportProps> = ({ course, onClose }) =
           const rawVal = student.grades[sub.id];
           if (typeof rawVal === 'string' && rawVal.trim().toUpperCase() === 'NE') return;
           validCount++;
-          const val = parseFloat((rawVal as string) || '0');
+          const val = parseLocalizedNumber(rawVal || '0');
           subSum += isNaN(val) ? 0 : Math.max(0, val);
         });
         const avg = validCount > 0 ? subSum / validCount : 0;
@@ -211,10 +227,68 @@ export const CourseReport: React.FC<CourseReportProps> = ({ course, onClose }) =
               </div>
             </div>
 
+            {/* --- Seguimiento prioritario --- */}
+            <div className="page-break pt-8">
+              <h2 className="text-3xl font-heading font-bold border-b-2 border-slate-900 pb-2 mb-4">2. Seguimiento Prioritario</h2>
+              <p className="text-slate-600 mb-8 italic">Alumnos que requieren atención docente según notas actuales, evolución, ceros por posible no entrega, vacíos y distancia respecto a la media.</p>
+
+              {actionableRiskProfiles.length === 0 ? (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-green-800 font-medium">
+                  No hay alumnos con señales relevantes de riesgo en las evaluaciones iniciadas.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {actionableRiskProfiles.map(profile => (
+                    <div key={profile.studentId} className="border border-slate-300 rounded-lg p-5 no-break bg-white shadow-sm">
+                      <div className="flex items-start justify-between gap-4 mb-3">
+                        <div>
+                          <h3 className="text-xl font-heading font-bold text-slate-900">{profile.studentName}</h3>
+                          <div className="text-sm text-slate-500">Nota actual ponderada sobre evaluaciones iniciadas: <strong>{profile.finalGrade.toFixed(2)}</strong></div>
+                        </div>
+                        <div className={cn('rounded-full border px-3 py-1 text-xs font-bold', getRiskPrintClasses(profile.level))}>
+                          {getRiskLabel(profile.level)} · {profile.score} pts
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-3 mb-4">
+                        <div className="bg-slate-50 border border-slate-100 rounded p-3 text-center">
+                          <div className="text-[10px] uppercase text-slate-400 font-bold">Ceros</div>
+                          <div className="text-lg font-bold text-slate-800">{profile.metrics.zeroCount}</div>
+                        </div>
+                        <div className="bg-slate-50 border border-slate-100 rounded p-3 text-center">
+                          <div className="text-[10px] uppercase text-slate-400 font-bold">Vacías</div>
+                          <div className="text-lg font-bold text-slate-800">{profile.metrics.blankCount}</div>
+                        </div>
+                        <div className="bg-slate-50 border border-slate-100 rounded p-3 text-center">
+                          <div className="text-[10px] uppercase text-slate-400 font-bold">NE</div>
+                          <div className="text-lg font-bold text-slate-800">{profile.metrics.neCount}</div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <h4 className="font-semibold text-slate-800 mb-2">Motivos</h4>
+                          <ul className="space-y-1 text-slate-700">
+                            {profile.reasons.map(reason => <li key={reason}>• {reason}</li>)}
+                          </ul>
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-slate-800 mb-2">Acciones sugeridas</h4>
+                          <ul className="space-y-1 text-slate-700">
+                            {profile.suggestedActions.map(action => <li key={action}>• {action}</li>)}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* --- PÁGINA 3+: Desglose por Alumnos --- */}
             <div className="pt-8 mt-8 border-t border-slate-200">
               <div className="avoid-break-after">
-                <h2 className="text-3xl font-heading font-bold border-b-2 border-slate-900 pb-2 mb-4">2. Seguimiento Individual (Claustro)</h2>
+                <h2 className="text-3xl font-heading font-bold border-b-2 border-slate-900 pb-2 mb-4">3. Seguimiento Individual (Claustro)</h2>
                 <p className="text-slate-600 mb-8 italic">Comparativa de cada alumno respecto a la media de la clase, para identificar rendimientos anómalos o áreas de mejora inmediata.</p>
               </div>
               

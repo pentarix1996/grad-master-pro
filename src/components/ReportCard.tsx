@@ -6,6 +6,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import type { Student, Course } from '../types';
+import { parseLocalizedNumber } from '../lib/utils';
+import { getStudentRiskProfile, RISK_LEVEL, type StudentRiskProfile } from '../lib/gradeAnalytics';
 
 interface ReportCardProps {
   student: Student;
@@ -14,12 +16,25 @@ interface ReportCardProps {
   onClose: () => void;
 }
 
+const getRiskBadgeClasses = (level: StudentRiskProfile['level']) => {
+  if (level === RISK_LEVEL.HIGH) return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 border-red-200 dark:border-red-900/50';
+  if (level === RISK_LEVEL.MEDIUM) return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-900/50';
+  return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 border-green-200 dark:border-green-900/50';
+};
+
+const getRiskLabel = (level: StudentRiskProfile['level']) => {
+  if (level === RISK_LEVEL.HIGH) return 'Riesgo alto';
+  if (level === RISK_LEVEL.MEDIUM) return 'Seguimiento';
+  return 'Sin alerta';
+};
+
 export const ReportCard: React.FC<ReportCardProps> = ({ student: initialStudent, course, onUpdateCourse, onClose }) => {
   const student = course.students.find(s => s.id === initialStudent.id) || initialStudent;
   const componentRef = useRef<HTMLDivElement>(null);
   const [newNoteText, setNewNoteText] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editNoteText, setEditNoteText] = useState('');
+  const riskProfile = getStudentRiskProfile(student, course);
 
   const handleAddNote = () => {
     if (!newNoteText.trim()) return;
@@ -69,7 +84,7 @@ export const ReportCard: React.FC<ReportCardProps> = ({ student: initialStudent,
         const rawVal = student.grades[sub.id];
         if (typeof rawVal === 'string' && rawVal.trim().toUpperCase() === 'NE') return;
         validCount++;
-        const val = parseFloat((rawVal as string) || '0');
+        const val = parseLocalizedNumber(rawVal || '0');
         subSum += isNaN(val) ? 0 : Math.max(0, val);
       });
       const avg = validCount > 0 ? subSum / validCount : 0;
@@ -90,7 +105,7 @@ export const ReportCard: React.FC<ReportCardProps> = ({ student: initialStudent,
           const rawVal = s.grades[sub.id];
           if (typeof rawVal === 'string' && rawVal.trim().toUpperCase() === 'NE') return;
           validCount++;
-          const val = parseFloat((rawVal as string) || '0');
+          const val = parseLocalizedNumber(rawVal || '0');
           subSum += isNaN(val) ? 0 : Math.max(0, val);
         });
         const avg = validCount > 0 ? subSum / validCount : 0;
@@ -158,6 +173,50 @@ export const ReportCard: React.FC<ReportCardProps> = ({ student: initialStudent,
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <div className="md:col-span-2 bg-slate-50 dark:bg-slate-950 p-6 rounded-xl border border-slate-100 dark:border-slate-800">
+              <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-heading font-semibold text-slate-800 dark:text-slate-200 mb-2">Estado de Seguimiento</h3>
+                  <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${getRiskBadgeClasses(riskProfile.level)}`}>
+                    {getRiskLabel(riskProfile.level)} · {riskProfile.score} pts
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-2">
+                    <div className="text-[10px] uppercase font-semibold text-slate-400">Ceros</div>
+                    <div className="text-lg font-bold text-slate-800 dark:text-slate-200">{riskProfile.metrics.zeroCount}</div>
+                  </div>
+                  <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-2">
+                    <div className="text-[10px] uppercase font-semibold text-slate-400">Vacías</div>
+                    <div className="text-lg font-bold text-slate-800 dark:text-slate-200">{riskProfile.metrics.blankCount}</div>
+                  </div>
+                  <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-2">
+                    <div className="text-[10px] uppercase font-semibold text-slate-400">NE</div>
+                    <div className="text-lg font-bold text-slate-800 dark:text-slate-200">{riskProfile.metrics.neCount}</div>
+                  </div>
+                </div>
+              </div>
+
+              {riskProfile.reasons.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-5">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Motivos detectados</div>
+                    <ul className="space-y-1.5 text-sm text-slate-700 dark:text-slate-300">
+                      {riskProfile.reasons.map(reason => <li key={reason}>• {reason}</li>)}
+                    </ul>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Acciones sugeridas</div>
+                    <ul className="space-y-1.5 text-sm text-slate-700 dark:text-slate-300">
+                      {riskProfile.suggestedActions.map(action => <li key={action}>• {action}</li>)}
+                    </ul>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-4">No hay señales relevantes de riesgo en las evaluaciones iniciadas.</p>
+              )}
+            </div>
+
             <div className="bg-slate-50 dark:bg-slate-950 p-6 rounded-xl border border-slate-100 dark:border-slate-800">
               <h3 className="text-lg font-heading font-semibold mb-4 text-slate-800 dark:text-slate-200">Evolución vs Clase</h3>
               <div className="h-64">
