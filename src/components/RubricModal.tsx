@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Plus, Trash2, Calculator } from 'lucide-react';
-import { generateId, cn } from '../lib/utils';
+import { generateId, cn, parseLocalizedNumber } from '../lib/utils';
 
 interface Criterion {
   id: string;
@@ -19,7 +19,7 @@ interface RubricModalProps {
 
 export const RubricModal: React.FC<RubricModalProps> = ({ initialGrade, onSave, onClose, title = "Rúbrica de Evaluación" }) => {
   const [criteria, setCriteria] = useState<Criterion[]>([
-    { id: generateId(), name: 'Criterio 1', weight: 100, score: typeof initialGrade === 'number' || (typeof initialGrade === 'string' && !isNaN(Number(initialGrade)) && initialGrade !== '') ? Number(initialGrade) : '' }
+    { id: generateId(), name: 'Criterio 1', weight: 100, score: initialGrade !== '' && !Number.isNaN(parseLocalizedNumber(initialGrade)) ? parseLocalizedNumber(initialGrade) : '' }
   ]);
 
   const totalWeight = criteria.reduce((sum, c) => sum + (c.weight || 0), 0);
@@ -83,10 +83,10 @@ export const RubricModal: React.FC<RubricModalProps> = ({ initialGrade, onSave, 
                   <div className="flex items-center gap-2">
                     <div className="relative w-1/2">
                       <input
-                        type="number" min="0" max="10" step="0.1"
+                        type="text" inputMode="decimal"
                         placeholder="Nota (0-10)"
                         value={c.score}
-                        onChange={e => updateCriterion(c.id, 'score', e.target.value === '' ? '' : Number(e.target.value))}
+                        onChange={e => updateCriterion(c.id, 'score', e.target.value === '' ? '' : parseLocalizedNumber(e.target.value))}
                         className="w-full bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-sm outline-none focus:border-indigo-500"
                       />
                     </div>
