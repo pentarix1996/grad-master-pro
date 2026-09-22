@@ -1,5 +1,5 @@
 import type { Course, Evaluation, Student } from '../types';
-import { parseLocalizedNumber } from './utils';
+import { parseLocalizedNumber } from './utils.ts';
 
 export const RISK_LEVEL = {
   LOW: 'low',

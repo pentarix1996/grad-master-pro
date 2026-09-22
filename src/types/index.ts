@@ -15,6 +15,15 @@ export interface Evaluation {
   name: string;
   weight: number | '';
   sections: Section[];
+  closure?: { completedAt: string; signature: string };
+}
+
+export interface Competency {
+  id: string;
+  name: string;
+  description: string;
+  target: number;
+  subsectionIds: string[];
 }
 
 export interface GradeMap {
@@ -41,6 +50,7 @@ export interface Course {
   name: string;
   evaluations: Evaluation[];
   students: Student[];
+  competencies?: Competency[];
   // Legacy support
   sections?: Section[];
 }

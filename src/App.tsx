@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useMemo } from 'react';
 import {
   Plus,
   Trash2,
@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   X,
   Pencil,
+  Copy,
   AlertTriangle,
   Sun,
   Moon,
@@ -28,10 +29,12 @@ import type { Course, Evaluation, Section, Student } from './types';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { useIndexedDbStorage } from './hooks/useIndexedDbStorage';
 import { cn, generateId, parseLocalizedNumber } from './lib/utils';
+import { cloneCourse } from './lib/cloneCourse';
 import { calculateCurrentCourseGrade, calculateEvaluationGrade, getCourseRiskProfiles, getStartedEvaluations, RISK_LEVEL, type StudentRiskProfile } from './lib/gradeAnalytics';
 import { ReportCard } from './components/ReportCard';
 import { RubricModal } from './components/RubricModal';
 import { CourseReport } from './components/CourseReport';
+const LearningStudio = lazy(() => import('./components/learning/LearningStudio'));
 // --- COMPONENTES UI (Mini Design System) ---
 
 const Button = ({ children, variant = 'primary', className, ...props }: any) => {
@@ -74,6 +77,9 @@ const Dialog = ({ isOpen, onClose, title, children }: any) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -1302,6 +1308,25 @@ export default function App() {
   const [renamingCourse, setRenamingCourse] = useState<Course | null>(null);
   const [renameInput, setRenameInput] = useState('');
 
+  const [cloningCourse, setCloningCourse] = useState<Course | null>(null);
+  const [cloneNameInput, setCloneNameInput] = useState('');
+
+  const openCloneModal = (course: Course, event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    setCloningCourse(course);
+    setCloneNameInput(`${course.name} (copia)`);
+  };
+
+  const handleCloneCourse = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!cloningCourse || !cloneNameInput.trim()) return;
+
+    const clonedCourse = cloneCourse(cloningCourse, cloneNameInput);
+    setCourses(previousCourses => [...previousCourses, clonedCourse]);
+    setCloningCourse(null);
+    setCloneNameInput('');
+  };
+
   const openRenameModal = (course: Course, e: any) => {
     e.stopPropagation();
     setRenamingCourse(course);
@@ -1604,6 +1629,15 @@ export default function App() {
                                 <Pencil size={18} />
                               </button>
                               <button
+                                type="button"
+                                onClick={(e) => openCloneModal(course, e)}
+                                className="text-slate-400 hover:text-indigo-500 dark:text-slate-500 dark:hover:text-indigo-400 transition-colors p-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                                title="Clonar curso"
+                                aria-label={`Clonar curso ${course.name}`}
+                              >
+                                <Copy size={18} />
+                              </button>
+                              <button
                                 onClick={(e) => deleteCourse(course.id, e)}
                                 className="text-slate-300 hover:text-red-500 dark:text-slate-600 dark:hover:text-red-400 transition-colors p-1"
                                 title="Borrar curso"
@@ -1654,17 +1688,17 @@ export default function App() {
                 className="space-y-6"
               >
                 {/* Sección de Estadísticas del Curso */}
-                <div>
+                {view !== 'learning' && <div>
                   <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
                     <Target size={20} className="text-indigo-500" />
                     Estadísticas del Curso
                   </h3>
                   <CourseStats course={activeCourse} />
-                </div>
+                </div>}
 
                 {/* Tabs de Navegación del Curso */}
                 <div className="flex justify-between items-center">
-                  <div className="flex space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg w-fit">
+                  <div className="flex flex-wrap gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg w-fit">
                     <button
                       onClick={() => setView('grades')}
                       className={cn(
@@ -1687,6 +1721,12 @@ export default function App() {
                     >
                       Configuración
                     </button>
+                    <button
+                      onClick={() => setView('learning')}
+                      className={cn("px-4 py-2 rounded-md text-sm font-medium transition-all", view === 'learning' ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200")}
+                    >
+                      Espacio de aprendizaje
+                    </button>
                   </div>
                 </div>
 
@@ -1694,6 +1734,10 @@ export default function App() {
                 <div className="min-h-[500px]">
                   {view === 'grades' ? (
                     <GlobalGradebook course={activeCourse} onUpdate={updateCourse} />
+                  ) : view === 'learning' ? (
+                    <Suspense fallback={<div className="p-12 text-center text-slate-500" role="status">Preparando el espacio de aprendizaje…</div>}>
+                      <LearningStudio key={activeCourse.id} course={activeCourse} onUpdate={updateCourse} />
+                    </Suspense>
                   ) : (
                     <GlobalCourseConfig course={activeCourse} onUpdate={updateCourse} />
                   )}
@@ -1726,6 +1770,48 @@ export default function App() {
               <Button onClick={createCourse}>Crear Curso</Button>
             </div>
           </div>
+        </Dialog>
+
+        {/* Modal Clonar Curso */}
+        <Dialog
+          isOpen={!!cloningCourse}
+          onClose={() => setCloningCourse(null)}
+          title="Clonar curso"
+        >
+          <form
+            className="space-y-4"
+            onSubmit={handleCloneCourse}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') setCloningCourse(null);
+            }}
+          >
+            <p id="clone-course-description" className="text-sm text-slate-500 dark:text-slate-400">
+              Se copiará todo el contenido de <strong className="text-slate-700 dark:text-slate-200">{cloningCourse?.name}</strong>:
+              {' '}evaluaciones, secciones, ponderaciones, alumnos, calificaciones, notas y avisos descartados.
+              {' '}Los cambios en la copia serán independientes del curso original.
+            </p>
+            <div>
+              <label htmlFor="clone-course-name" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Nombre del nuevo curso
+              </label>
+              <Input
+                id="clone-course-name"
+                aria-describedby="clone-course-description"
+                value={cloneNameInput}
+                onChange={(event: React.ChangeEvent<HTMLInputElement>) => setCloneNameInput(event.target.value)}
+                onFocus={(event: React.FocusEvent<HTMLInputElement>) => event.target.select()}
+                placeholder="Nombre del curso"
+                autoFocus
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button type="button" variant="ghost" onClick={() => setCloningCourse(null)}>Cancelar</Button>
+              <Button type="submit" disabled={!cloneNameInput.trim()}>
+                <Copy size={16} className="mr-2" /> Clonar curso
+              </Button>
+            </div>
+          </form>
         </Dialog>
 
         {/* Modal Renombrar Curso */}

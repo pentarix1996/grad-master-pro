@@ -8,7 +8,7 @@
 
 ## 🚀 Key Features
 
-*   **Course Management**: Create, edit, and delete multiple courses.
+*   **Course Management**: Create, edit, delete, and clone courses. Use the copy icon beside the rename pencil to choose a name and create an independent copy of all course data, including students, grades, notes, evaluation settings, and dismissed warnings.
 *   **Flexible Configuration**: Define custom sections (e.g., Exams, Homework) and subsections with specific weights impacting the final grade.
 *   **Interactive Gradebook**:
     *   Add and manage students.
@@ -21,6 +21,11 @@
 *   **Import/Export**: Backup and restore your course data via JSON files.
 *   **Dark/Light Mode**: Fully responsive interface with theming support.
 *   **Modern UI/UX**: Smooth animations with Framer Motion and clean design using Tailwind CSS.
+*   **Learning Space (Three.js)**: Open a course and choose **Espacio de aprendizaje** for three connected experiences:
+    *   **Competencias**: Create and edit competencies, set a target, and link existing activities. Explore an interactive 3D tree for the class or a student. Indicators average linked numeric evidence; missing grades and NE are excluded and course grades remain unchanged.
+    *   **Progreso**: Replay evaluations in course order, pause, or select any station. Empty evaluations remain ungraded; existing grading rules and manual overrides are respected.
+    *   **Tutorías**: Present a four-step student review in fullscreen, use arrow keys to advance and Escape to exit, save agreements to student notes, and print a private student summary. Existing private notes and classmates' results are not projected.
+    *   All views support a 2D alternative and reduced motion. Three.js loads on demand; scenes release their GPU resources on exit. Competencies and tutoring agreements are included in course backups and clones.
 
 ## 🛠️ Tech Stack
 
@@ -66,6 +71,7 @@ To get a local copy up and running, follow these simple steps.
 *   `npm run dev`: Starts the development server with HMR.
 *   `npm run build`: Type-checks and builds the project for production.
 *   `npm run lint`: Runs ESLint to check for code quality issues.
+*   `npm test`: Verifies complete and independent course cloning (requires Node.js 22.6+).
 *   `npm run preview`: Locally previews the production build.
 
 ## 📖 Usage Guide
